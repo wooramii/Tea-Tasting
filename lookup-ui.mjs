@@ -1,3 +1,4 @@
+import {externalSearchLinks} from './search-links.mjs';
 import {safeUrl} from './core.mjs';
 import {ProductLookup,barcodeValue,lookupQuery,localCandidates,importedFields,mergeProductInfo} from './lookup.mjs';
 
@@ -26,12 +27,12 @@ export function initProductLookup({form,getRecords,onDirty,onStatus}){
    onDirty();onStatus(merged.applied.length+'개 제품정보를 불러왔습니다. 분류와 실제 포장을 확인하고 테이스팅 저장을 누르세요.');close();document.getElementById('product-extra').open=true;field('제품명').focus();
   });apply.className='primary';actions.append(apply,button('후보 목록으로',()=>{preview.hidden=true;list.hidden=false;}));preview.append(actions);list.hidden=true;
  }
- function draw(items,{loading=false,failed=false}={}){list.replaceChildren();list.hidden=false;preview.hidden=true;for(const item of items){const b=button('',()=>choose(item)),r=item.record;b.className='lookup-candidate';b.append(node('strong',r['제품명']||'제품명 미등록'),node('small',[r['브랜드'],r['용량'],r['바코드']].filter(Boolean).join(' · ')),node('small',item.source));list.append(b);}if(!items.length&&!loading){list.append(node('p',failed?'외부 조회를 완료하지 못했습니다. 입력한 내용은 그대로 유지됩니다.':'등록된 제품을 찾지 못했습니다. 브랜드·영문명으로 다시 찾거나 직접 입력하세요.','help'));}if(lastQuery){const href=lastMode==='barcode'?'https://www.google.com/search?q='+encodeURIComponent(lastQuery+' 제품'):'https://www.google.com/search?q='+encodeURIComponent(lastQuery+' tea');list.append(link('웹 검색으로 확인하기',href));}attribution(list);}
+ function draw(items,{loading=false,failed=false}={}){list.replaceChildren();list.hidden=false;preview.hidden=true;for(const item of items){const b=button('',()=>choose(item)),r=item.record;b.className='lookup-candidate';b.append(node('strong',r['제품명']||'제품명 미등록'),node('small',[r['브랜드'],r['용량'],r['바코드']].filter(Boolean).join(' · ')),node('small',item.source));list.append(b);}if(!items.length&&!loading){list.append(node('p',failed?'외부 조회를 완료하지 못했습니다. 입력한 내용은 그대로 유지됩니다.':'내 기록과 Open Food Facts에서 찾지 못했습니다. 아래 사이트에서도 검색하거나 직접 입력하세요.','help'));}if(lastQuery){const searches=node('div',null,'external-searches');for(const item of externalSearchLinks(lastQuery))searches.append(link(item.label,item.url));list.append(searches,node('p','외부 검색화면을 새 탭으로 엽니다. 결과는 자동 입력되지 않으므로 확인 후 직접 기록하세요.','help'));}attribution(list);}
  async function search(mode){
   let query;try{query=mode==='barcode'?barcodeValue(field('바코드').value):lookupQuery(field('제품명').value);}catch(error){onStatus(error.message);field(mode==='barcode'?'바코드':'제품명').focus();return;}
   close();const current=++request;lastMode=mode;lastQuery=query;panel.hidden=false;panel.setAttribute('aria-busy','true');preview.hidden=true;
   const local=localCandidates(getRecords(),mode,query);draw(local,{loading:true});message.textContent=(local.length?'내 기록 '+local.length+'개 확인 · ':'')+'공개 제품정보 조회 중…';
-  try{const remote=await client.search(mode,query);if(current!==request)return;const items=[...local,...remote];draw(items);message.textContent=items.length?items.length+'개 후보 · 제품을 선택해 확인하세요.':'조회 완료 · 등록 제품 없음';}
+  try{const remote=await client.search(mode,query);if(current!==request)return;const items=[...local,...remote];draw(items);message.textContent=items.length?items.length+'개 후보 · 제품을 선택해 확인하세요.':'조회 완료 · Open Food Facts 등록 제품 없음';}
   catch(error){if(current!==request||error.name==='AbortError')return;draw(local,{failed:true});message.textContent=error.message+(local.length?' 내 기록의 후보는 사용할 수 있습니다.':'');}
   finally{if(current===request)panel.removeAttribute('aria-busy');}
  }
