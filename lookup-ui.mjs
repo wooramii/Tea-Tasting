@@ -1,4 +1,4 @@
-import {externalSearchLinks,barcodeDatabaseLinks} from './search-links.mjs';
+import {externalSearchLinks,barcodeDatabaseLinks,gs1SearchUrl} from './search-links.mjs';
 import {WebProductLookup,loadTurnstile} from './web-product.mjs';
 import {safeUrl} from './core.mjs';
 import {ProductLookup,barcodeValue,lookupQuery,localCandidates,importedFields,mergeProductInfo} from './lookup.mjs';
@@ -52,7 +52,7 @@ export function initProductLookup({form,getRecords,onDirty,onStatus,webConfig=wi
   if(!items.length&&!loading)list.append(node('p',failed?'외부 조회를 완료하지 못했습니다. 입력한 내용은 그대로 유지됩니다.':lastMode==='barcode'?'일치 제품 없음 · 입력한 바코드와 일치하는 정보가 확인된 제품만 표시합니다. 제품명으로 다시 검색하거나 직접 입력하세요.':'등록 제품이 없습니다. 웹 검색이나 직접 입력을 이용하세요.','help'));
   if(lastQuery){const more=button('웹에서도 제품 찾기',()=>searchWeb());more.disabled=loading;list.append(more);
    if(!webConfig.endpoint||!webConfig.siteKey)list.append(link('Tavily 연결 설정 안내','tavily-setup.html'));
-   if(lastMode==='barcode'){const databases=node('div',null,'external-searches');for(const item of barcodeDatabaseLinks(lastQuery))databases.append(link(item.label,item.url));list.append(databases,node('p','바코드 전용 DB도 미등록 제품은 없을 수 있습니다. GS1은 번호를 직접 입력하며 제품정보 대신 사업자 정보만 나올 수 있습니다.','help'));}
+   if(lastMode==='barcode'){const databases=node('div',null,'external-searches');for(const item of barcodeDatabaseLinks(lastQuery))databases.append(link(item.label,item.url));list.append(databases,node('p','GS1은 입력한 바코드가 채워진 새 탭을 엽니다. 사이트에서 필요한 확인을 완료하세요. 상품정보 대신 사업자 정보만 나올 수도 있으며, 결과는 차곡에 자동 입력되지 않습니다.','help'));}
    const searches=node('div',null,'external-searches');for(const item of externalSearchLinks(lastQuery).sort((a,b)=>(a.label==='Google 검색'?-1:0)-(b.label==='Google 검색'?-1:0)))searches.append(link(item.label,item.url));list.append(searches,node('p','위 바로가기는 외부 검색화면을 엽니다. Tavily는 Google과 다른 검색 결과를 제공하며, 웹 후보를 선택하면 표시된 정보가 자동 입력됩니다.','help'));
   }if(items.some(item=>item.source==='Open Food Facts'))attribution(list);
  }
@@ -73,6 +73,17 @@ export function initProductLookup({form,getRecords,onDirty,onStatus,webConfig=wi
   finally{if(current===request)panel.removeAttribute('aria-busy');}
  }
  document.getElementById('lookup-name').onclick=()=>search('name');document.getElementById('lookup-barcode').onclick=()=>search('barcode');document.getElementById('close-lookup').onclick=close;
+ const copyButton=document.getElementById('copy-barcode');if(copyButton)copyButton.onclick=async()=>{
+  let code;try{code=barcodeValue(field('바코드').value);}catch(error){onStatus(error.message);field('바코드').focus();return;}
+  copyButton.disabled=true;
+  try{await navigator.clipboard.writeText(code);onStatus('바코드 '+code+'를 복사했습니다.');}
+  catch{field('바코드').focus();field('바코드').select();onStatus('복사를 허용하지 않아 입력칸을 선택했습니다. Ctrl+C 또는 기기의 복사 메뉴를 사용하세요.');}
+  finally{copyButton.disabled=false;}
+ };
+ const gs1Button=document.getElementById('lookup-gs1');if(gs1Button)gs1Button.onclick=()=>{
+  try{const url=gs1SearchUrl(field('바코드').value);window.open(url,'_blank','noopener,noreferrer');onStatus('GS1에서 바코드를 확인하세요. 결과는 차곡에 자동 입력되지 않습니다.');}
+  catch(error){onStatus(error.message);field('바코드').focus();}
+ };
  form.addEventListener('input',event=>{if(['name','barcode'].includes(event.target.id)&&!panel.hidden)close();});
  return {search,close};
 }
