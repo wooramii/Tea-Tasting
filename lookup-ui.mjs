@@ -49,7 +49,7 @@ export function initProductLookup({form,getRecords,onDirty,onStatus,webConfig=wi
    b.append(node('strong',r['제품명']||'제품명 미등록'),node('small',[r['브랜드'],r['용량'],r['바코드']].filter(Boolean).join(' · ')),node('small',item.source));
    if(isWeb){if(item.summary)b.append(node('small',item.summary));b.append(node('small',item.warning),node('small','이 후보 선택 · 제품명과 표시된 정보 자동 입력'));}list.append(b);if(isWeb)list.append(link('후보 원문 확인',r['제품정보출처']));
   }
-  if(!items.length&&!loading)list.append(node('p',failed?'외부 조회를 완료하지 못했습니다. 입력한 내용은 그대로 유지됩니다.':'등록 제품이 없습니다. 웹 검색이나 직접 입력을 이용하세요.','help'));
+  if(!items.length&&!loading)list.append(node('p',failed?'외부 조회를 완료하지 못했습니다. 입력한 내용은 그대로 유지됩니다.':lastMode==='barcode'?'일치 제품 없음 · 입력한 바코드와 일치하는 정보가 확인된 제품만 표시합니다. 제품명으로 다시 검색하거나 직접 입력하세요.':'등록 제품이 없습니다. 웹 검색이나 직접 입력을 이용하세요.','help'));
   if(lastQuery){const more=button('웹에서도 제품 찾기',()=>searchWeb());more.disabled=loading;list.append(more);
    if(!webConfig.endpoint||!webConfig.siteKey)list.append(link('Tavily 연결 설정 안내','tavily-setup.html'));
    if(lastMode==='barcode'){const databases=node('div',null,'external-searches');for(const item of barcodeDatabaseLinks(lastQuery))databases.append(link(item.label,item.url));list.append(databases,node('p','바코드 전용 DB도 미등록 제품은 없을 수 있습니다. GS1은 번호를 직접 입력하며 제품정보 대신 사업자 정보만 나올 수 있습니다.','help'));}
@@ -60,7 +60,7 @@ export function initProductLookup({form,getRecords,onDirty,onStatus,webConfig=wi
   if(!webConfig.endpoint||!webConfig.siteKey){message.textContent='웹 검색 연결 설정 전입니다. 아래 Tavily 연결 설정 안내를 따라 주세요.';return;}
   clearChallenge();web.cancel();const current=++request,base=visibleItems.filter(x=>x.source!=='Tavily 웹 검색');
   draw(base,{loading:true});panel.setAttribute('aria-busy','true');message.textContent='웹에서 제품 후보를 찾고 있습니다…';
-  try{const found=await web.search(lastMode,lastQuery);if(current!==request)return;draw([...base,...found]);message.textContent=found.length?'웹 검색 '+found.length+'개 후보 · 실제 제품을 확인하고 후보를 누르면 자동 입력됩니다.':'웹 검색에서도 후보를 찾지 못했습니다. 제품명을 추가하거나 직접 입력하세요.';}
+  try{const found=await web.search(lastMode,lastQuery);if(current!==request)return;draw([...base,...found]);message.textContent=lastMode==='barcode'?(found.length?'바코드 일치 '+found.length+'개 웹 후보 · 제품명·포장을 확인하고 선택하세요.':'웹 검색에서 바코드 일치 제품을 찾지 못했습니다. 제품명으로 검색하거나 직접 입력하세요.'):(found.length?'웹 검색 '+found.length+'개 후보 · 실제 제품을 확인하고 후보를 누르면 자동 입력됩니다.':'웹 검색에서도 후보를 찾지 못했습니다. 제품명을 추가하거나 직접 입력하세요.');}
   catch(error){if(current!==request||error.name==='AbortError')return;draw(base,{failed:true});message.textContent=error.message;}
   finally{if(current===request)panel.removeAttribute('aria-busy');}
  }

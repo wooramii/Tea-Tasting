@@ -18,12 +18,14 @@ export class WebProductLookup{
    const data=await response.json();if(sequence!==this.sequence)throw new DOMException('취소됨','AbortError');
    if(!Array.isArray(data.items))throw Error('웹 검색 응답 형식이 올바르지 않습니다.');
    const items=data.items.slice(0,5).flatMap((item,index)=>{
+    // 이전 서버가 무관한 결과를 반환해도 바코드 후보로 노출하지 않습니다.
+    if(mode==='barcode'&&(item.record?.['바코드']!==query||item.barcodeMatch?.code!==query||item.barcodeMatch?.method!=='source-field'))return [];
     const source=safeUrl(item.record?.['제품정보출처']);if(!source)return [];
     const record={};for(const field of importedFields){const value=item.record?.[field];if(typeof value==='string')record[field]=value.slice(0,field==='원재료표기'?10000:2000);}
     for(const field of ['이미지URL','구매URL'])if(record[field])record[field]=safeUrl(record[field]);
     if(!record['제품명'])return [];
     record['제품정보출처']=source;record['제품정보조회일']=new Date().toISOString();
-    return [{id:'web-'+index,source:'Tavily 웹 검색',record,summary:String(item.summary||'').slice(0,500),warning:String(item.warning||'검색 제목을 제품명으로 사용합니다. 실제 제품과 용량을 확인하세요.').slice(0,300)}];
+    return [{id:'web-'+index,source:'Tavily 웹 검색',record,...(mode==='barcode'?{barcodeMatch:item.barcodeMatch}:{}),summary:String(item.summary||'').slice(0,500),warning:String(item.warning||'검색 제목을 제품명으로 사용합니다. 실제 제품과 용량을 확인하세요.').slice(0,300)}];
    });
    this.cache.set(key,{time:Date.now(),items});if(this.cache.size>20)this.cache.delete(this.cache.keys().next().value);return items;
   }catch(error){if(error.name==='AbortError'&&sequence===this.sequence)throw Error('웹 검색 응답 시간이 초과되었습니다. 다시 조회하세요.');if(error instanceof TypeError)throw Error('웹 검색에 연결하지 못했습니다. 인터넷과 중계 주소를 확인하세요.');throw error;}

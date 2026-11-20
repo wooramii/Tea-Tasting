@@ -22,7 +22,7 @@ export function offCandidate(product,at=new Date().toISOString()){
 export function localCandidates(records,mode,query){
  const words=query.toLocaleLowerCase('ko-KR').split(/\s+/),found=new Map();
  for(const r of [...records].sort((a,b)=>String(b['테이스팅일']).localeCompare(String(a['테이스팅일'])))){
-  const match=mode==='barcode'?String(r['바코드']).replace(/[\s-]/g,'')===query:words.every(w=>(r['제품명']+' '+r['브랜드']).normalize('NFKC').toLocaleLowerCase('ko-KR').includes(w));
+  const match=mode==='barcode'?String(r['바코드']).normalize('NFKC').replace(/[\s-]/g,'')===query:words.every(w=>(r['제품명']+' '+r['브랜드']).normalize('NFKC').toLocaleLowerCase('ko-KR').includes(w));
   if(match&&!found.has(productKey(r)))found.set(productKey(r),{id:'local-'+r.id,source:'내 기록',record:r});
  }
  return [...found.values()].slice(0,8);
@@ -58,7 +58,7 @@ export class ProductLookup{
    const data=await response.json();if(sequence!==this.sequence)throw new DOMException('취소됨','AbortError');
    const products=mode==='barcode'?(data.product?[data.product]:[]):data.products;
    if(!Array.isArray(products))throw Error('제품정보 응답 형식을 읽을 수 없습니다. 직접 입력하거나 나중에 다시 조회하세요.');
-   const items=[],seen=new Set();for(const product of products){const item=offCandidate(product);if(item&&!seen.has(item.id)){seen.add(item.id);items.push(item);}}
+   const items=[],seen=new Set();for(const product of products){const item=offCandidate(product);if(item&&(mode!=='barcode'||item.record['바코드']===query)&&!seen.has(item.id)){seen.add(item.id);items.push(item);}}
    this.cache.set(key,{time:this.clock(),items:items.slice(0,8)});if(this.cache.size>50)this.cache.delete(this.cache.keys().next().value);
    return items.slice(0,8);
   }catch(error){if(timedOut)throw Error('조회 응답이 늦어 중단했습니다. 잠시 후 다시 조회하거나 직접 입력하세요.');if(error.name==='AbortError')throw error;if(error instanceof TypeError)throw Error('제품정보 서비스에 연결하지 못했습니다. 인터넷 연결을 확인하거나 직접 입력하세요.');throw error;}
