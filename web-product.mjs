@@ -10,7 +10,7 @@ export class WebProductLookup{
   if(!refresh&&cached&&Date.now()-cached.time<600000)return cached.items;
   if(!safeUrl(this.endpoint))throw Error('웹 검색 연결 설정 전입니다. Tavily 연결 안내를 확인하세요.');
   const token=await this.getToken();if(sequence!==this.sequence)throw new DOMException('취소됨','AbortError');
-  const controller=new AbortController();this.controller=controller;const timer=setTimeout(()=>controller.abort(),25000);
+  const controller=new AbortController();this.controller=controller;const timer=setTimeout(()=>controller.abort(),38000);
   try{
    const response=await this.fetcher(this.endpoint,{method:'POST',credentials:'omit',referrerPolicy:'no-referrer',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode,query,token,...(context?{context}:{})}),signal:controller.signal});
    if(sequence!==this.sequence)throw new DOMException('취소됨','AbortError');
@@ -24,8 +24,19 @@ export class WebProductLookup{
     const record={};for(const field of importedFields){const value=item.record?.[field];if(typeof value==='string')record[field]=value.slice(0,field==='원재료표기'?10000:2000);}
     for(const field of ['이미지URL','구매URL'])if(record[field])record[field]=safeUrl(record[field]);
     if(!record['제품명'])return [];
+    const officialFields=[];
+    if(Array.isArray(item.officialFields)){
+     for(const field of ['원재료표기','용량']){
+      if(!record[field]||!item.officialFields.includes(field))continue;
+      const officialUrl=safeUrl(item.fieldSources?.[field]);
+      if(!officialUrl)continue;
+      if(record['공식몰상품고시URL']&&record['공식몰상품고시URL']!==officialUrl)continue;
+      record['공식몰상품고시URL']=officialUrl;
+      officialFields.push(field);
+     }
+    }
     record['제품정보출처']=source;record['제품정보조회일']=new Date().toISOString();
-    return [{id:'web-'+index,source:'Tavily 웹 검색',record,...(mode==='barcode'?{barcodeMatch:item.barcodeMatch}:{}),summary:String(item.summary||'').slice(0,500),warning:String(item.warning||'검색 제목을 제품명으로 사용합니다. 실제 제품과 용량을 확인하세요.').slice(0,300)}];
+    return [{id:'web-'+index,source:'Tavily 웹 검색',record,officialFields,...(mode==='barcode'?{barcodeMatch:item.barcodeMatch}:{}),summary:String(item.summary||'').slice(0,500),warning:String(item.warning||'실제 제품과 용량을 확인하세요.').slice(0,300)}];
    });
    this.cache.set(key,{time:Date.now(),items});if(this.cache.size>20)this.cache.delete(this.cache.keys().next().value);return items;
   }catch(error){if(error.name==='AbortError'&&sequence===this.sequence)throw Error('웹 검색 응답 시간이 초과되었습니다. 다시 조회하세요.');if(error instanceof TypeError)throw Error('웹 검색에 연결하지 못했습니다. 인터넷과 중계 주소를 확인하세요.');throw error;}

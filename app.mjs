@@ -41,7 +41,7 @@ function updateFormState(){
 }
 function growTextareas(root){root.querySelectorAll('textarea').forEach(n=>{n.style.height='auto';if(n.value)n.style.height=n.scrollHeight+'px';});}
 document.querySelectorAll('textarea').forEach(n=>n.addEventListener('input',()=>growTextareas(n.parentElement)));
-function updateProductLinks(){for(const [id,field] of [['open-image','이미지URL'],['open-purchase','구매URL'],['open-source','제품정보출처']]){const a=$('#'+id),url=safeUrl(productForm.elements.namedItem(field).value);a.hidden=!url;if(url)a.href=url;else a.removeAttribute('href');}}
+function updateProductLinks(){for(const [id,field] of [['open-image','이미지URL'],['open-purchase','구매URL'],['open-source','제품정보출처'],['open-official-notice','공식몰상품고시URL']]){const a=$('#'+id),url=safeUrl(productForm.elements.namedItem(field).value);a.hidden=!url;if(url)a.href=url;else a.removeAttribute('href');}}
 function imagePreview(){updateProductLinks();const box=$('#product-image-preview'),url=safeUrl($('#image').value);box.replaceChildren();if(url){const img=el('img');img.src=url;img.alt=($('#name').value||'제품')+' 이미지';img.referrerPolicy='no-referrer';img.onerror=()=>{if(img.isConnected)box.replaceChildren(el('p','이미지를 불러오지 못했습니다. 주소와 원문을 확인하세요.','help'));};box.append(img);}else box.append(el('div','茶','tea-mark'),el('p','제품 이미지 미리보기 · 이미지 미등록','help'));
  const retrieved=productForm.elements.namedItem('제품정보조회일').value;$('#source-summary').textContent=retrieved?'정보 조회일: '+retrieved+' · 불러온 항목: '+productForm.elements.namedItem('제품정보반영항목').value:'원문에서 확인된 정보만 사용합니다.';
 }
@@ -60,7 +60,7 @@ async function applyCandidate(candidate){
  const match=candidate.source==='내 기록'?library().find(g=>g.id===catalogId(candidate.record)):library().find(g=>productKey(g.product)===productKey(normalizeRecord(r)));
  resetEntry(true);draftProductId=match?.id||'';activeProductId=candidate.source==='내 기록'?match?.id||'':'';productDirty=!activeProductId;
  fillProduct(r);if(r['제품정보출처'])$('#product-extra').open=true;updateFormState();$('#name').focus();
- status(activeProductId?'저장된 제품정보를 불러왔습니다. 날짜별 평가를 추가하세요.':'제품정보와 확인된 이미지를 입력했습니다. 분류와 실제 포장을 확인한 뒤 제품정보를 저장하세요.');return true;
+ status(activeProductId?'저장된 제품정보를 불러왔습니다. 날짜별 평가를 추가하세요.':'확인된 제품정보를 입력했습니다. 분류와 실제 포장을 확인한 뒤 제품정보를 저장하세요.');return true;
 }
 const lookupUI=initProductLookup({form:productForm,queryForm,getRecords:()=>library().map(g=>({...g.product,'제품ID':g.id})),onApply:applyCandidate,onDirty:()=>{productDirty=true;updateFormState();},onStatus:status});
 async function loadProduct(g){if(busy)return;if(!await confirmDiscard('저장된 제품을 불러올까요?','저장하지 않은 입력을 비우고 이 제품에 테이스팅을 추가합니다.'))return;resetEntry();activeProductId=g.id;draftProductId=g.id;fillProduct(g.product);selected=g.id;render();$('#date').focus();$('#tasting-title').scrollIntoView({block:'start'});status('저장된 제품정보를 불러왔습니다. 테이스팅 날짜와 평가를 입력하세요.');}
@@ -79,7 +79,15 @@ function detail(g,tastingId=''){
  area.append(el('small',r['분류']+' · '+(r['브랜드']||'브랜드 미입력'),'muted'),el('h2',r['제품명']));
  const meta=el('dl',undefined,'product-meta');for(const [key,label] of [['용량','용량 · 포장'],['바코드','바코드'],['판매가격','판매가격 · 원문 표기'],['판매가격확인일','판매가격 확인일'],['원재료표기','원재료명'],['블렌딩','블렌딩']])if(r[key])meta.append(el('dt',label),el('dd',r[key]));area.append(meta);
  if(safeUrl(r['구매URL']))area.append(externalLink('판매 페이지 열기',safeUrl(r['구매URL'])));
- if(safeUrl(r['제품정보출처'])){const box=el('div',undefined,'source-note');box.append(externalLink('제품정보 원문',safeUrl(r['제품정보출처'])));if(r['제품정보조회일'])box.append(el('p','조회일: '+r['제품정보조회일']));if(new URL(r['제품정보출처']).hostname==='world.openfoodfacts.org')box.append(externalLink('Open Food Facts · ODbL / DbCL · 이미지 CC BY-SA','https://world.openfoodfacts.org/terms-of-use'));area.append(box);}
+ const source=safeUrl(r['제품정보출처']),officialNotice=safeUrl(r['공식몰상품고시URL']);
+ if(source||officialNotice){
+  const box=el('div',undefined,'source-note');
+  if(source&&source!==officialNotice)box.append(externalLink('제품정보 원문',source));
+  if(officialNotice)box.append(source&&source!==officialNotice?' · ':'',externalLink('공식몰 상품고시',officialNotice));
+  if(r['제품정보조회일'])box.append(el('p','조회일: '+r['제품정보조회일']));
+  if(source&&new URL(source).hostname==='world.openfoodfacts.org')box.append(externalLink('Open Food Facts · ODbL / DbCL · 이미지 CC BY-SA','https://world.openfoodfacts.org/terms-of-use'));
+  area.append(box);
+ }
  const actions=el('div',undefined,'toolbar');
  const remove=button('제품 삭제',()=>deleteProduct(g.id));
  remove.className='danger-text';
