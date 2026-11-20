@@ -14,9 +14,9 @@ function externalLink(label,url){const a=el('a',label);a.href=url;a.target='_bla
 function localRecords(){try{const a=JSON.parse(localStorage.getItem(LOCAL)||'[]');if(!Array.isArray(a))throw Error();return a.map(normalizeRecord);}catch{status('이 기기의 기록을 읽지 못했습니다. 백업을 확인해 주세요.');return [];}}
 records=localRecords();$('#date').value=today();
 let confirmResolve=null;
-function confirmDiscard(title,description,action='입력 비우기'){
+function confirmDiscard(title,description,action='작성한 내용 지우기'){
  if(!dirty())return Promise.resolve(true);
- $('#reset-title').textContent=title;$('#reset-description').textContent=description;$('#confirm-reset').textContent=action;
+ $('#cancel-reset').textContent='취소 · 현재 내용 유지';$('#reset-title').textContent=title;$('#reset-description').textContent=description;$('#confirm-reset').textContent=action;
  $('#reset-dialog').showModal();return new Promise(resolve=>{confirmResolve=resolve;});
 }
 function finishConfirm(value){$('#reset-dialog').close();confirmResolve?.(value);confirmResolve=null;}
@@ -36,7 +36,8 @@ function updateFormState(){
 }
 function growTextareas(root){root.querySelectorAll('textarea').forEach(n=>{n.style.height='auto';if(n.value)n.style.height=n.scrollHeight+'px';});}
 document.querySelectorAll('textarea').forEach(n=>n.addEventListener('input',()=>growTextareas(n.parentElement)));
-function imagePreview(){const box=$('#product-image-preview'),url=safeUrl($('#image').value);box.replaceChildren();if(url){const img=el('img');img.src=url;img.alt=($('#name').value||'제품')+' 이미지';img.referrerPolicy='no-referrer';img.onerror=()=>{if(img.isConnected)box.replaceChildren(el('p','이미지를 불러오지 못했습니다. 주소와 원문을 확인하세요.','help'));};box.append(img);}else box.append(el('div','茶','tea-mark'),el('p','제품 이미지 미리보기 · 이미지 미등록','help'));
+function updateProductLinks(){for(const [id,field] of [['open-image','이미지URL'],['open-purchase','구매URL'],['open-source','제품정보출처']]){const a=$('#'+id),url=safeUrl(productForm.elements.namedItem(field).value);a.hidden=!url;if(url)a.href=url;else a.removeAttribute('href');}}
+function imagePreview(){updateProductLinks();const box=$('#product-image-preview'),url=safeUrl($('#image').value);box.replaceChildren();if(url){const img=el('img');img.src=url;img.alt=($('#name').value||'제품')+' 이미지';img.referrerPolicy='no-referrer';img.onerror=()=>{if(img.isConnected)box.replaceChildren(el('p','이미지를 불러오지 못했습니다. 주소와 원문을 확인하세요.','help'));};box.append(img);}else box.append(el('div','茶','tea-mark'),el('p','제품 이미지 미리보기 · 이미지 미등록','help'));
  const retrieved=productForm.elements.namedItem('제품정보조회일').value;$('#source-summary').textContent=retrieved?'정보 조회일: '+retrieved+' · 불러온 항목: '+productForm.elements.namedItem('제품정보반영항목').value:'원문에서 확인된 정보만 사용합니다.';
 }
 function resetTasting(){form.reset();$('#date').value=today();tastingDirty=false;pending.tasting={id:'',text:''};$('#form-error').textContent='';form.querySelectorAll('[aria-invalid]').forEach(n=>n.removeAttribute('aria-invalid'));growTextareas(form);updateFormState();}
@@ -45,11 +46,11 @@ async function startNew(){if(busy)return;if(!await confirmDiscard('새 제품을
 $('#new-product').onclick=startNew;$('#reset-entry').onclick=startNew;
 $('#reset-tasting').onclick=async()=>{if(busy)return;if(tastingDirty&&!await confirmDiscard('관능평가 입력을 비울까요?','저장하지 않은 관능평가만 비웁니다. 저장된 제품정보와 기록은 유지됩니다.'))return;resetTasting();$('#date').focus();status('관능평가 입력을 초기화했습니다.');};
 for(const name of metrics){const row=el('div',undefined,'metric'),label=el('label',name),select=el('select'),id='metric-'+metrics.indexOf(name);label.htmlFor=id;select.id=id;select.name=name;select.append(new Option('미평가',''));for(let i=1;i<=9;i++)select.append(new Option(i+'점',String(i)));row.append(label,select);$('#sensory').append(row);}
-productForm.addEventListener('input',event=>{productDirty=true;updateFormState();if(['image','name','source-url'].includes(event.target.id))imagePreview();});productForm.addEventListener('change',()=>{productDirty=true;updateFormState();});form.addEventListener('input',()=>{tastingDirty=true;});form.addEventListener('change',()=>{tastingDirty=true;});
+productForm.addEventListener('input',event=>{productDirty=true;updateFormState();if(['image','purchase','name','source-url'].includes(event.target.id))imagePreview();});productForm.addEventListener('change',()=>{productDirty=true;updateFormState();});form.addEventListener('input',()=>{tastingDirty=true;});form.addEventListener('change',()=>{tastingDirty=true;});
 function fillProduct(r){productForm.reset();for(const key of metadataFields){const input=productForm.elements.namedItem(key);if(input)input.value=r[key]||'';}growTextareas(productForm);imagePreview();updateFormState();}
 async function applyCandidate(candidate){
  if(busy){status('진행 중인 작업이 끝나면 후보를 선택하세요.');return false;}
- if(!await confirmDiscard('선택한 제품정보를 불러올까요?','저장하지 않은 제품정보와 관능평가를 비우고 선택한 제품을 채웁니다.'))return false;
+ if(!await confirmDiscard('이 후보로 제품정보를 바꿀까요?','현재 작성 중인 제품정보와 관능평가는 아직 저장되지 않았습니다. 바꾸면 이 입력은 지워지고 선택한 후보의 정보가 채워집니다. 이미 저장한 기록은 그대로 유지됩니다.','이 후보로 바꾸기'))return false;
  const r={...candidate.record};r['분류']=r['분류']||$('#query-category').value;r['브랜드']=r['브랜드']||$('#query-brand').value.trim();
  const match=candidate.source==='내 기록'?library().find(g=>g.id===catalogId(candidate.record)):library().find(g=>productKey(g.product)===productKey(normalizeRecord(r)));
  resetEntry(true);draftProductId=match?.id||'';activeProductId=candidate.source==='내 기록'?match?.id||'':'';productDirty=!activeProductId;
@@ -69,6 +70,7 @@ function render(){
 }
 function detail(g,tastingId=''){
  const area=$('#detail'),r=g.product;area.replaceChildren();const image=safeUrl(r['이미지URL']);if(image){const img=el('img');img.className='hero-image';img.src=image;img.alt=r['제품명']+' 제품 이미지';img.referrerPolicy='no-referrer';img.onerror=()=>img.replaceWith(el('p','제품 이미지를 불러올 수 없습니다.','help'));area.append(img);}else area.append(el('div','茶','tea-mark'));
+ if(image)area.append(externalLink('이미지 원본 열기',image));
  area.append(el('small',r['분류']+' · '+(r['브랜드']||'브랜드 미입력'),'muted'),el('h2',r['제품명']));
  const meta=el('dl',undefined,'product-meta');for(const [key,label] of [['용량','용량 · 포장'],['바코드','바코드'],['판매가격','판매가격 · 원문 표기'],['판매가격확인일','판매가격 확인일'],['원재료표기','원재료명'],['블렌딩','블렌딩']])if(r[key])meta.append(el('dt',label),el('dd',r[key]));area.append(meta);
  if(safeUrl(r['구매URL']))area.append(externalLink('판매 페이지 열기',safeUrl(r['구매URL'])));

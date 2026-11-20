@@ -4,10 +4,10 @@ import {barcodeValue,lookupQuery,importedFields} from './lookup.mjs';
 export class WebProductLookup{
  constructor({endpoint='',getToken,fetcher=(url,options)=>globalThis.fetch(url,options)}){Object.assign(this,{endpoint,getToken,fetcher});this.cache=new Map();this.controller=null;this.sequence=0;}
  cancel(){this.sequence++;this.controller?.abort();this.controller=null;}
- async search(mode,value,context){
+ async search(mode,value,context,refresh=false){
   const query=mode==='barcode'?barcodeValue(value):lookupQuery(value),key=mode+':'+query+JSON.stringify(context||{});
   this.cancel();const sequence=this.sequence,cached=this.cache.get(key);
-  if(cached&&Date.now()-cached.time<600000)return cached.items;
+  if(!refresh&&cached&&Date.now()-cached.time<600000)return cached.items;
   if(!safeUrl(this.endpoint))throw Error('웹 검색 연결 설정 전입니다. Tavily 연결 안내를 확인하세요.');
   const token=await this.getToken();if(sequence!==this.sequence)throw new DOMException('취소됨','AbortError');
   const controller=new AbortController();this.controller=controller;const timer=setTimeout(()=>controller.abort(),25000);
