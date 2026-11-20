@@ -1,6 +1,6 @@
 import {safeUrl,productKey} from './core.mjs';
 
-export const importedFields=['제품명','브랜드','바코드','용량','원재료표기','이미지URL'];
+export const importedFields=['제품명','브랜드','바코드','용량','원재료표기','이미지URL','구매URL'];
 const fields=['code','product_name','product_name_ko','product_name_en','brands','quantity','ingredients_text','ingredients_text_ko','ingredients_text_en','image_front_url'];
 const service='https://world.openfoodfacts.org';
 const identity='Chagok/1.1 (https://wooramii.github.io/Tea-Tasting/)';
@@ -29,7 +29,7 @@ export function localCandidates(records,mode,query){
 }
 export function mergeProductInfo(current,candidate,chosen){
  const next={...current},applied=[];
- for(const key of importedFields){if(!chosen.includes(key)||!candidate.record[key])continue;const value=candidate.record[key];if(key==='이미지URL'&&!safeUrl(value))continue;next[key]=value;applied.push(key);}
+ for(const key of importedFields){if(!chosen.includes(key)||!candidate.record[key])continue;const value=candidate.record[key];if(['이미지URL','구매URL'].includes(key)&&!safeUrl(value))continue;next[key]=value;applied.push(key);}
  if(applied.length){next['제품정보출처']=safeUrl(candidate.record['제품정보출처']);next['제품정보조회일']=candidate.record['제품정보조회일']||'';next['제품정보반영항목']=applied.join(', ');}
  return {record:next,applied};
 }
