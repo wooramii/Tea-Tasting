@@ -1,6 +1,6 @@
 import {safeUrl,productKey} from './core.mjs';
 
-export const importedFields=['제품명','브랜드','바코드','용량','원재료표기','이미지URL','구매URL'];
+export const importedFields=['제품명','브랜드','바코드','용량','원재료표기','이미지URL','구매URL','판매가격','판매가격확인일'];
 const fields=['code','product_name','product_name_ko','product_name_en','brands','quantity','ingredients_text','ingredients_text_ko','ingredients_text_en','image_front_url'];
 const service='https://world.openfoodfacts.org';
 const identity='Chagok/1.1 (https://wooramii.github.io/Tea-Tasting/)';
@@ -13,6 +13,14 @@ export function barcodeValue(value){
  return code;
 }
 export function lookupQuery(value){const query=String(value).normalize('NFKC').trim().replace(/\s+/g,' ');if(query.length<2||query.length>100)throw Error('제품명은 2~100자로 입력하세요. 브랜드명과 영문명을 함께 써도 좋습니다.');return query;}
+export function combinedLookup(source){
+ const context={name:String(source['제품명']||'').normalize('NFKC').trim(),brand:String(source['브랜드']||'').normalize('NFKC').trim(),category:String(source['분류']||'')};
+ if(context.name.length>100||context.brand.length>100)throw Error('제품명과 브랜드는 각각 100자 이하로 입력하세요.');
+ if(context.category&&!['티백','RTD','분말','잎차'].includes(context.category))throw Error('분류를 확인하세요.');
+ if(String(source['바코드']||'').trim())return {mode:'barcode',query:barcodeValue(source['바코드']),context};
+ if(!context.name&&!context.brand)throw Error('제품명·브랜드·바코드 중 하나를 입력하세요. 분류만으로는 제품을 찾기 어렵습니다.');
+ return {mode:'name',query:lookupQuery([context.name,context.brand,context.category].filter(Boolean).join(' ')),context};
+}
 const clean=(value,max=1000)=>typeof value==='string'?value.trim().slice(0,max):'';
 export function offCandidate(product,at=new Date().toISOString()){
  const code=clean(String(product.code??''),40);if(!/^\d{8,14}$/.test(code))return null;
@@ -22,7 +30,7 @@ export function offCandidate(product,at=new Date().toISOString()){
 export function localCandidates(records,mode,query){
  const words=query.toLocaleLowerCase('ko-KR').split(/\s+/),found=new Map();
  for(const r of [...records].sort((a,b)=>String(b['테이스팅일']).localeCompare(String(a['테이스팅일'])))){
-  const match=mode==='barcode'?String(r['바코드']).normalize('NFKC').replace(/[\s-]/g,'')===query:words.every(w=>(r['제품명']+' '+r['브랜드']).normalize('NFKC').toLocaleLowerCase('ko-KR').includes(w));
+  const match=mode==='barcode'?String(r['바코드']).normalize('NFKC').replace(/[\s-]/g,'')===query:words.every(w=>(r['제품명']+' '+r['브랜드']+' '+r['분류']).normalize('NFKC').toLocaleLowerCase('ko-KR').includes(w));
   if(match&&!found.has(productKey(r)))found.set(productKey(r),{id:'local-'+r.id,source:'내 기록',record:r});
  }
  return [...found.values()].slice(0,8);

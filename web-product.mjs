@@ -4,15 +4,15 @@ import {barcodeValue,lookupQuery,importedFields} from './lookup.mjs';
 export class WebProductLookup{
  constructor({endpoint='',getToken,fetcher=(url,options)=>globalThis.fetch(url,options)}){Object.assign(this,{endpoint,getToken,fetcher});this.cache=new Map();this.controller=null;this.sequence=0;}
  cancel(){this.sequence++;this.controller?.abort();this.controller=null;}
- async search(mode,value){
-  const query=mode==='barcode'?barcodeValue(value):lookupQuery(value),key=mode+':'+query;
+ async search(mode,value,context){
+  const query=mode==='barcode'?barcodeValue(value):lookupQuery(value),key=mode+':'+query+JSON.stringify(context||{});
   this.cancel();const sequence=this.sequence,cached=this.cache.get(key);
   if(cached&&Date.now()-cached.time<600000)return cached.items;
   if(!safeUrl(this.endpoint))throw Error('웹 검색 연결 설정 전입니다. Tavily 연결 안내를 확인하세요.');
   const token=await this.getToken();if(sequence!==this.sequence)throw new DOMException('취소됨','AbortError');
   const controller=new AbortController();this.controller=controller;const timer=setTimeout(()=>controller.abort(),25000);
   try{
-   const response=await this.fetcher(this.endpoint,{method:'POST',credentials:'omit',referrerPolicy:'no-referrer',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode,query,token}),signal:controller.signal});
+   const response=await this.fetcher(this.endpoint,{method:'POST',credentials:'omit',referrerPolicy:'no-referrer',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode,query,token,...(context?{context}:{})}),signal:controller.signal});
    if(sequence!==this.sequence)throw new DOMException('취소됨','AbortError');
    if(!response.ok){const messages={400:'검색어가 올바르지 않습니다.',403:'검색 확인이 만료되었거나 사이트 설정이 맞지 않습니다. 다시 조회하세요.',429:'웹 검색 사용량에 도달했습니다. 잠시 후 다시 조회하세요.',503:'웹 검색 연결 설정을 확인해 주세요.',504:'웹 검색 응답이 늦습니다. 다시 조회하세요.'};throw Error(messages[response.status]||'웹 검색 서비스에 연결하지 못했습니다. 잠시 후 다시 조회하세요.');}
    const data=await response.json();if(sequence!==this.sequence)throw new DOMException('취소됨','AbortError');
