@@ -1,6 +1,6 @@
 import {initCameraScanner} from './camera.mjs';
 import {initProductLookup} from './lookup-ui.mjs';
-import {metrics,columns,schemaUpgrade,normalizeRecord,validateRTD,today,validate,safeUrl,toRow,fromRows,similarity,productKey,isProduct,catalogId,metadataFields,productDraft,buildLibrary} from './core.mjs';
+import {metrics,columns,schemaUpgrade,normalizeRecord,validateRTD,today,validate,safeUrl,toRow,fromRows,similarity,productKey,isProduct,catalogId,metadataFields,productDraft,buildLibrary,productDeletionRanges} from './core.mjs';
 import {barcodeValue} from './lookup.mjs';
 const $=s=>document.querySelector(s),form=$('#record-form'),productForm=$('#product-form'),queryForm=$('#lookup-form'),LOCAL='chagok-local-v1';
 let records=[],selected='',category='전체',limit=20,token='',sheetId='',busy=false,productDirty=false,tastingDirty=false,activeProductId='',draftProductId='',needsReconnect=false,epoch=0;
@@ -11,12 +11,17 @@ const dirty=()=>productDirty||tastingDirty;
 const library=()=>buildLibrary(records);
 const button=(text,fn)=>{const n=el('button',text);n.type='button';n.onclick=fn;return n;};
 function externalLink(label,url){const a=el('a',label);a.href=url;a.target='_blank';a.rel='noopener noreferrer';return a;}
-function localRecords(){try{const a=JSON.parse(localStorage.getItem(LOCAL)||'[]');if(!Array.isArray(a))throw Error();return a.map(normalizeRecord);}catch{status('이 기기의 기록을 읽지 못했습니다. 백업을 확인해 주세요.');return [];}}
+function localRecords(strict=false){try{const a=JSON.parse(localStorage.getItem(LOCAL)||'[]');if(!Array.isArray(a))throw Error();return a.map(normalizeRecord);}catch{const message='이 기기의 기록을 읽지 못했습니다. 백업을 확인해 주세요.';if(strict)throw Error(message);status(message);return [];}}
 records=localRecords();$('#date').value=today();
 let confirmResolve=null;
 function confirmDiscard(title,description,action='작성한 내용 지우기'){
  if(!dirty())return Promise.resolve(true);
- $('#cancel-reset').textContent='취소 · 현재 내용 유지';$('#reset-title').textContent=title;$('#reset-description').textContent=description;$('#confirm-reset').textContent=action;
+ return confirmAction(title,description,action,'취소 · 현재 내용 유지');
+}
+function confirmAction(title,description,action,cancel='취소',destructive=false){
+ if($('#reset-dialog').open)return Promise.resolve(false);
+ $('#cancel-reset').textContent=cancel;$('#reset-title').textContent=title;$('#reset-description').textContent=description;$('#confirm-reset').textContent=action;
+ $('#confirm-reset').classList.toggle('destructive',destructive);
  $('#reset-dialog').showModal();return new Promise(resolve=>{confirmResolve=resolve;});
 }
 function finishConfirm(value){$('#reset-dialog').close();confirmResolve?.(value);confirmResolve=null;}
@@ -75,7 +80,11 @@ function detail(g,tastingId=''){
  const meta=el('dl',undefined,'product-meta');for(const [key,label] of [['용량','용량 · 포장'],['바코드','바코드'],['판매가격','판매가격 · 원문 표기'],['판매가격확인일','판매가격 확인일'],['원재료표기','원재료명'],['블렌딩','블렌딩']])if(r[key])meta.append(el('dt',label),el('dd',r[key]));area.append(meta);
  if(safeUrl(r['구매URL']))area.append(externalLink('판매 페이지 열기',safeUrl(r['구매URL'])));
  if(safeUrl(r['제품정보출처'])){const box=el('div',undefined,'source-note');box.append(externalLink('제품정보 원문',safeUrl(r['제품정보출처'])));if(r['제품정보조회일'])box.append(el('p','조회일: '+r['제품정보조회일']));if(new URL(r['제품정보출처']).hostname==='world.openfoodfacts.org')box.append(externalLink('Open Food Facts · ODbL / DbCL · 이미지 CC BY-SA','https://world.openfoodfacts.org/terms-of-use'));area.append(box);}
- const actions=el('div',undefined,'toolbar');actions.append(button('제품정보 / 테이스팅 추가',()=>loadProduct(g)));area.append(actions,el('h3','날짜별 테이스팅 기록'));
+ const actions=el('div',undefined,'toolbar');
+ const remove=button('제품 삭제',()=>deleteProduct(g.id));
+ remove.className='danger-text';
+ actions.append(button('제품정보 / 테이스팅 추가',()=>loadProduct(g)),remove);
+ area.append(actions,el('h3','날짜별 테이스팅 기록'));
  if(!g.tastings.length){area.append(el('p','제품정보만 저장되어 있습니다. 마신 날 테이스팅을 추가하세요.','help'));return;}
  const t=g.tastings.find(x=>x.id===tastingId)||g.tastings[0];area.append(el('p',t['테이스팅일']+' 평가','note'));if(t['가격_원']!=='')area.append(el('p','내 구매가격: '+Number(t['가격_원']).toLocaleString('ko-KR')+'원'));
  for(const tag of t['향미태그'].split(/[,，]/).filter(Boolean))area.append(el('span',tag.trim(),'tag'));
@@ -103,6 +112,57 @@ if(upgrade){
  await api(base+'/values:batchUpdate',{method:'POST',body:JSON.stringify({valueInputOption:'RAW',data:updates})});
 }
 return result;
+}
+
+async function deleteProduct(productId){
+ if(busy){status('진행 중인 작업이 끝나면 제품을 삭제하세요.');return;}
+ if(needsReconnect){status('Google에 다시 연결한 뒤 제품을 삭제하세요.');return;}
+ const productRows=records.filter(r=>catalogId(r)===productId);
+ const group=buildLibrary(productRows)[0];
+ if(!group){status('이미 목록에서 사라진 제품입니다.');return;}
+ const expected=new Set(productRows.map(r=>r.id));
+ const destination=token&&sheetId?'Google 개인 시트':'이 기기';
+ const connectionVersion=epoch;
+ const currentDraft=activeProductId===productId||draftProductId===productId;
+ const tastingCount=group.tastings.length;
+ const scope=tastingCount?`‘${group.product['제품명']}’ 제품정보와 연결된 테이스팅 ${tastingCount}회가`:`‘${group.product['제품명']}’ 제품정보가`;
+ const warning=`${scope} ${destination}에서 삭제됩니다. ${currentDraft&&dirty()?'이 제품에 작성 중인 입력도 비웁니다. ':''}차곡에서 바로 되돌릴 수 없습니다.`;
+ if(!await confirmAction('이 제품을 삭제할까요?',warning,'제품 삭제','취소',true))return;
+ if(busy||connectionVersion!==epoch){status('저장 위치를 다시 확인한 뒤 제품을 선택해 주세요.');return;}
+ setBusy(true);
+ status('제품과 테이스팅을 삭제하고 있습니다…');
+ try{
+  const cloud=Boolean(token&&sheetId);
+  const base='https://sheets.googleapis.com/v4/spreadsheets/'+sheetId;
+  const valuesUrl=base+'/values/Records?valueRenderOption=UNFORMATTED_VALUE';
+  const rows=cloud?(await api(valuesUrl)).values||[]:null;
+  const fresh=cloud?fromRows(rows):localRecords(true);
+  const target=fresh.filter(r=>catalogId(r)===productId);
+  if(target.length&&(target.length!==expected.size||target.some(r=>!expected.has(r.id)))){
+   records=fresh;
+   render();refreshDetail();
+   status('이 제품의 기록이 바뀌었습니다. 삭제할 내용을 다시 확인해 주세요.');
+   return;
+  }
+  const remaining=fresh.filter(r=>catalogId(r)!==productId);
+  if(cloud&&target.length){
+   const ranges=productDeletionRanges(rows,expected);
+   if(ranges.length!==expected.size)throw Error('시트에서 삭제 대상을 확인할 수 없습니다.');
+   await api(base+'/values:batchClear',{method:'POST',body:JSON.stringify({ranges})});
+   const saved=fromRows((await api(valuesUrl)).values||[]);
+   if(saved.some(r=>catalogId(r)===productId))throw Error('시트에 이 제품의 기록이 남아 있습니다.');
+   records=saved;
+  }else{
+   if(!cloud&&target.length)localStorage.setItem(LOCAL,JSON.stringify(remaining));
+   records=remaining;
+  }
+  if(currentDraft)resetEntry();else lookupUI.close();
+  if(selected===productId)selected='';
+  render();refreshDetail();$('#search').focus();
+  status(target.length?`‘${group.product['제품명']}’ 제품${tastingCount?`과 테이스팅 기록 ${tastingCount}건`:''}을 ${destination}에서 삭제했습니다.`:'이미 저장소에서 삭제된 제품입니다.');
+ }catch(error){
+  status(`삭제를 확인하지 못했습니다. ${error.message} · 새로고침으로 상태를 확인한 뒤 다시 시도하세요.`);
+ }finally{setBusy(false);}
 }
 
 function accountUI(){const cloud=!!token&&!!sheetId;$('#account').textContent=cloud?(needsReconnect?'Google 연결 만료 · 다시 연결하세요.':'Google 개인 시트 연결됨 · 60초마다 갱신'):'이 기기에 저장 · Google 연결 전';$('#connect').textContent='Google로 연결';$('#connect').hidden=cloud&&!needsReconnect;$('#disconnect').hidden=true;$('#sheet').disabled=!cloud;}

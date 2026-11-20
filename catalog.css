@@ -16,3 +16,5 @@
 .lookup-candidate[aria-pressed=true]{background:var(--wash);border:2px solid var(--primary);color:var(--ink);padding:11px}
 
 .lookup-candidate .candidate-fields{display:block;background:#e7f0fa;color:#174c78;border-left:3px solid #39759f;border-radius:4px;padding:7px 9px;margin-top:9px;font-weight:600;clear:both}.product-shortcut{display:inline-block;font-size:14px;margin:7px 0;padding:6px 12px;border:1px solid var(--line);border-radius:7px;background:var(--wash)}.product-shortcut:hover{background:var(--line)}
+.danger-text{color:var(--danger)}
+button.primary.destructive{color:#fff;background:var(--danger);border-color:var(--danger)}

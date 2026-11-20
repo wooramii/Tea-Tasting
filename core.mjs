@@ -21,6 +21,14 @@ export function similarity(a,b){const keys=metrics.filter(k=>a[k]!==''&&a[k]!=nu
 export function productKey(r){return r['바코드']?r['분류']+'|'+r['바코드']:r['분류']+'|'+r['브랜드'].trim().toLowerCase()+'|'+r['제품명'].trim().toLowerCase();}
 export function sheetColumn(index){let result='';for(let n=index;n>0;n=Math.floor((n-1)/26))result=String.fromCharCode(65+(n-1)%26)+result;return result;}
 export const catalogId=r=>r['제품ID']||'legacy:'+productKey(r);
+export function productDeletionRanges(rows, recordIds){
+ if(!recordIds.size)return [];
+ const lastColumn=sheetColumn(rows[0].length);
+ return rows.slice(1).flatMap((row,index)=>{
+  const rowNumber=index+2;
+  return recordIds.has(String(row[0]??''))?[`Records!A${rowNumber}:${lastColumn}${rowNumber}`]:[];
+ });
+}
 export const metadataFields=['제품명','브랜드','분류','바코드','용량','블렌딩','원재료표기','이미지URL','구매URL',...productInfoFields.slice(1),'판매가격','판매가격확인일'];
 export function productDraft(source,id){return normalizeRecord({...Object.fromEntries(metadataFields.map(k=>[k,source[k]||''])),'기록유형':'제품','제품ID':id});}
 export function buildLibrary(records){
